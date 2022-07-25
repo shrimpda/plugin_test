@@ -1,0 +1,23 @@
+configure(subprojects.findAll { it.parent.path == project.path }) {
+    group = 'com.kakaobank.kosmos.task'
+
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        implementation project(':core')
+    }
+
+    ext {
+        classNames = []
+    }
+
+    afterEvaluate {
+        jar {
+            manifest {
+                attributes('class-names': classNames)
+            }
+        }
+    }
+}
