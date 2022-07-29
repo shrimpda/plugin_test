@@ -1,3 +1,4 @@
 classNames = [
-        'com.kakaobank.filetask.FileTask'
+        'com.kakaobank.filetask.FileTask',
+        'com.kakaobank.filetask.FileTaskOther'
 ]

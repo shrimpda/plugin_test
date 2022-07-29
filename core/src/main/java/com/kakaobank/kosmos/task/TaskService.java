@@ -1,6 +1,7 @@
 package com.kakaobank.kosmos.task;
 
 import io.netty.util.internal.StringUtil;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -9,6 +10,8 @@ import javax.annotation.PostConstruct;
 import javax.management.Attribute;
 import java.io.IOException;
 import java.lang.annotation.Native;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.DirectoryStream;
@@ -23,9 +26,26 @@ import java.util.jar.Manifest;
 @Service
 public class TaskService {
 
+    private final ApplicationContext applicationContext;
+
+    public TaskService(ApplicationContext applicationContext) {
+        this.applicationContext = applicationContext;
+    }
+
     @PostConstruct
     public void init() {
-        getTaskClasses();
+        Thread thread = new Thread(() -> {
+            while (true) {
+                getTaskClasses();
+
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        thread.start();
     }
 
     Set<Class<Task>> getTaskClasses() {
@@ -40,7 +60,7 @@ public class TaskService {
                 Manifest manifest = jarFile.getManifest();
                 Attributes attributes = manifest.getMainAttributes();
                 System.out.println(attributes.getValue("class-names"));
-                String[] classNames = StringUtils.commaDelimitedListToStringArray(attributes.getValue("class-names").replace("[", "").replace("]", ""));
+                String[] classNames = StringUtils.commaDelimitedListToStringArray(StringUtils.trimAllWhitespace(attributes.getValue("class-names")).replace("[", "").replace("]", ""));
                 System.out.println(Arrays.toString(classNames));
 
                 classNameSet.addAll(Arrays.asList(classNames));
@@ -54,16 +74,43 @@ public class TaskService {
             e.printStackTrace();
         }
 
-        ClassLoader loader = URLClassLoader.newInstance(urls.toArray(new URL[0]),
+        URLClassLoader loader = URLClassLoader.newInstance(urls.toArray(new URL[0]),
                 getClass().getClassLoader());
 
         for (String className : classNameSet) {
             try {
                 Class<? extends Task> clazz = loader.loadClass(className).asSubclass(Task.class);
                 System.out.println(clazz);
+
+                try {
+                    Constructor[] constructors = clazz.getConstructors();
+                    for (Constructor constructor : constructors) {
+                        Class<?>[] parameterTypes = constructor.getParameterTypes();
+                        Object[] parameters = new Object[parameterTypes.length];
+                        for (int i = 0; i < parameters.length; i++) {
+                            parameters[i] = applicationContext.getBean(parameterTypes[i]);
+                        }
+                        Task task = (Task) constructor.newInstance(parameters);
+                        task.execute("value");
+                    }
+//                    Task aa = clazz.newInstance();
+//                    aa.execute("value");
+                } catch (InstantiationException e) {
+                    e.printStackTrace();
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                } catch (InvocationTargetException e) {
+                    e.printStackTrace();
+                }
             } catch (ClassNotFoundException e) {
                 e.printStackTrace();
             }
+        }
+
+        try {
+            loader.close();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
 
         return Collections.emptySet();
